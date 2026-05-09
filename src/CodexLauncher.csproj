@@ -8,7 +8,7 @@
     <AssemblyName>CodexProxySwitcher</AssemblyName>
     <RootNamespace>CodexLauncher</RootNamespace>
     <Product>Codex Proxy Switcher for Windows</Product>
-    <Authors>阿懒同学</Authors>
+    <Authors>hloolx</Authors>
     <Description>A lightweight Windows launcher for starting Codex Desktop with optional process-local proxy environment variables.</Description>
   </PropertyGroup>
 </Project>

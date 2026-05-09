@@ -1,6 +1,6 @@
 # Codex Proxy Switcher for Windows
 
-制作人：阿懒同学
+from [hloolx](https://github.com/hloolx)
 
 Codex Proxy Switcher for Windows 是一个轻量级 Windows 启动器，用来在启动 OpenAI Codex 桌面端前选择网络模式：
 

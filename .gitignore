@@ -3,6 +3,7 @@ obj/
 dist/
 publish/
 portable-win-x64/
+release-v*/
 *.user
 *.suo
 *.pdb

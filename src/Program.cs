@@ -111,13 +111,23 @@ internal sealed class LauncherForm : Form
             UseShellExecute = true
         });
 
-        var producerLabel = new Label
+        var authorLink = new LinkLabel
         {
-            Text = "制作人：阿懒同学",
+            Text = "from hloolx",
             AutoSize = false,
             TextAlign = ContentAlignment.MiddleCenter,
             Location = new Point(24, 252),
             Size = new Size(492, 24)
+        };
+        authorLink.Links.Add(5, 5, "https://github.com/hloolx");
+        authorLink.LinkClicked += (_, e) =>
+        {
+            var url = e.Link?.LinkData?.ToString() ?? "https://github.com/hloolx";
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
         };
 
         Controls.Add(title);
@@ -128,7 +138,7 @@ internal sealed class LauncherForm : Form
         Controls.Add(vpnButton);
         Controls.Add(changePortButton);
         Controls.Add(openConfigButton);
-        Controls.Add(producerLabel);
+        Controls.Add(authorLink);
 
         RefreshStatus();
     }
