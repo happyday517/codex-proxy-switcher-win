@@ -1,0 +1,11 @@
+bin/
+obj/
+dist/
+publish/
+portable-win-x64/
+*.user
+*.suo
+*.pdb
+*.zip
+*.exe
+.vs/
