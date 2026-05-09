@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 
-namespace CodexLauncher;
+namespace CodexProxySwitcher;
 
 internal static class Program
 {
@@ -32,7 +32,7 @@ internal sealed class LauncherForm : Form
     {
         this.configStore = configStore;
 
-        Text = "Codex 启动器";
+        Text = "Codex Proxy Switcher";
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -366,10 +366,11 @@ internal sealed class LauncherConfigStore
     {
         var configDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "CodexLauncher");
+            "CodexProxySwitcher");
         var settingsPath = Path.Combine(configDirectory, "settings.json");
 
         Directory.CreateDirectory(configDirectory);
+        MigrateLegacySettings(settingsPath);
 
         var settings = Load(settingsPath);
         if (settings is null)
@@ -422,6 +423,34 @@ internal sealed class LauncherConfigStore
     {
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
         File.WriteAllText(settingsPath, JsonSerializer.Serialize(settings, JsonOptions));
+    }
+
+    private static void MigrateLegacySettings(string settingsPath)
+    {
+        if (File.Exists(settingsPath))
+        {
+            return;
+        }
+
+        var legacyPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            // Migrate settings from versions released before the project was renamed.
+            "CodexLauncher",
+            "settings.json");
+
+        if (!File.Exists(legacyPath))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Copy(legacyPath, settingsPath, overwrite: false);
+        }
+        catch
+        {
+            // If migration fails, the first-run setup dialog will ask for the port again.
+        }
     }
 
     private static int ReadSuggestedPort()

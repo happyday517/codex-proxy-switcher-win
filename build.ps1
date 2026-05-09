@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$project = Join-Path $root "src\CodexLauncher.csproj"
+$project = Join-Path $root "src\CodexProxySwitcher.csproj"
 $dist = Join-Path $root "dist"
 
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
@@ -36,10 +36,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $sourceExe = Join-Path $dist "CodexProxySwitcher.exe"
-if (-not (Test-Path -LiteralPath $sourceExe)) {
-    $sourceExe = Join-Path $dist "CodexLauncher.exe"
-}
-
 $targetExe = Join-Path $dist "Codex-Proxy-Switcher.exe"
 if (Test-Path -LiteralPath $sourceExe) {
     Copy-Item -LiteralPath $sourceExe -Destination $targetExe -Force
