@@ -2,6 +2,8 @@
 
 from [hloolx](https://github.com/hloolx)
 
+学 AI 上 L 站：[linux.do](https://linux.do/)
+
 Codex Proxy Switcher for Windows 是一个轻量级 Windows 启动器，用来在启动 OpenAI Codex 桌面端前选择网络模式：
 
 - 原生启动：不注入代理环境变量，按 Codex 默认网络环境启动。
