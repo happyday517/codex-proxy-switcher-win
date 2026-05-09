@@ -1,6 +1,6 @@
-# Codex Launcher 项目介绍
+# Codex Proxy Switcher 项目介绍
 
-Codex Launcher 是一个 Windows 小启动器，用来在启动 Codex 桌面端前选择网络模式：
+Codex Proxy Switcher 是一个 Windows 小启动器，用来在启动 Codex 桌面端前选择网络模式：
 
 - 原生启动：不注入代理环境变量，按 Codex 默认网络环境启动。
 - VPN 启动：启动 Codex 前临时注入 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 和 `NO_PROXY`。
@@ -18,6 +18,7 @@ from [hloolx](https://github.com/hloolx)
    `%APPDATA%\CodexProxySwitcher\settings.json`
 3. 之后每次打开都会自动读取这个端口。
 4. 启动时自动查询这台电脑上的 Windows 商店版 Codex 安装位置。
+5. 首次配置完成后可选择创建桌面快捷方式，只提示一次。
 
 因此，同一个 exe 拷到另一台 Windows 电脑后，第一次运行会让那台电脑的用户输入自己的代理端口，后续就不用重复输入。
 
@@ -65,13 +66,13 @@ from [hloolx](https://github.com/hloolx)
 3. 第一次打开启动器时输入端口号。
 4. 日常使用优先点击“VPN 启动”。
 5. 网络不需要代理时点击“原生启动”。
-6. 任务栏建议固定本启动器，而不是原始 Codex 图标。
+6. 首次配置后可以选择添加桌面快捷方式，任务栏也建议固定本启动器，而不是原始 Codex 图标。
 
 ## 项目文件
 
 - `src\Program.cs`：启动器主程序源码。
 - `src\CodexProxySwitcher.csproj`：.NET Windows Forms 项目文件。
-- `Codex-Launcher.exe`：当前机器可直接运行的启动器。
+- `release\Codex-Proxy-Switcher.exe`：可直接下载运行的自包含 exe。
 - `Start-Codex-VPN.bat`：一键代理启动脚本。
 - `Start-Codex-Native.bat`：一键原生启动脚本。
 - `Start-Codex.ps1`：bat 背后的 PowerShell 启动逻辑。
@@ -79,6 +80,6 @@ from [hloolx](https://github.com/hloolx)
 
 ## 推荐分发方式
 
-推荐直接发仓库里的 `release\Codex-Proxy-Switcher.exe`，或者发 GitHub Releases 中的压缩包。首次运行时让对方输入自己的代理端口即可。
+普通用户只需要下载仓库里的 `release\Codex-Proxy-Switcher.exe` 这一个文件即可使用。首次运行时让对方输入自己的代理端口，之后程序会自动保存配置并自动查找 Codex 安装位置。
 
 当前推荐发布的是 self-contained 版本，对方通常不需要额外安装 .NET Runtime，但 exe 文件会明显更大。

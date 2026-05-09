@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.ComponentModel;
 using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 
 namespace CodexProxySwitcher;
@@ -34,132 +36,37 @@ internal sealed class LauncherForm : Form
     private const string NoProxy = "localhost,127.0.0.1,::1";
 
     private readonly LauncherConfigStore configStore;
-    private readonly Label proxyLabel;
-    private readonly Label codexPathLabel;
-    private readonly Label codexStateLabel;
+    private string proxyText = "";
+    private string codexPathText = "";
+    private string codexStateText = "";
+    private Color codexStateColor = Color.FromArgb(126, 231, 190);
 
     public LauncherForm(LauncherConfigStore configStore)
     {
         this.configStore = configStore;
 
         Text = "Codex Proxy Switcher";
+        AutoScaleMode = AutoScaleMode.None;
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = true;
-        ClientSize = new Size(720, 440);
-        BackColor = Color.FromArgb(17, 20, 34);
+        ClientSize = new Size(680, 390);
+        BackColor = Color.FromArgb(11, 18, 32);
         Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
         DoubleBuffered = true;
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-
-        var card = new GlassPanel
-        {
-            Location = new Point(30, 26),
-            Size = new Size(660, 388)
-        };
-
-        var logo = new LogoMark
-        {
-            Location = new Point(34, 32),
-            Size = new Size(72, 72)
-        };
-
-        var eyebrow = new Label
-        {
-            Text = "Windows Codex network launcher",
-            AutoSize = false,
-            ForeColor = Color.FromArgb(168, 219, 255),
-            Location = new Point(126, 30),
-            Size = new Size(440, 22),
-            BackColor = Color.Transparent
-        };
-
-        var title = new Label
-        {
-            Text = "Codex Proxy Switcher",
-            AutoSize = false,
-            ForeColor = Color.White,
-            Font = new Font(Font.FontFamily, 20F, FontStyle.Bold),
-            Location = new Point(124, 52),
-            Size = new Size(470, 42),
-            BackColor = Color.Transparent
-        };
-
-        var note = new Label
-        {
-            Text = "选择原生或 VPN 模式启动 Codex。启动前会关闭已运行的 Codex，避免复用旧进程。",
-            AutoSize = false,
-            ForeColor = Color.FromArgb(202, 215, 235),
-            Location = new Point(126, 94),
-            Size = new Size(480, 24),
-            BackColor = Color.Transparent
-        };
-
-        var statusPanel = new GlassPanel
-        {
-            Location = new Point(34, 134),
-            Size = new Size(592, 82),
-            Radius = 18,
-            GlassColor = Color.FromArgb(54, 255, 255, 255),
-            BorderColor = Color.FromArgb(82, 255, 255, 255)
-        };
-
-        var proxyTitleLabel = new Label
-        {
-            Text = "当前代理",
-            AutoSize = false,
-            ForeColor = Color.FromArgb(156, 179, 214),
-            Location = new Point(20, 16),
-            Size = new Size(104, 20),
-            BackColor = Color.Transparent
-        };
-
-        proxyLabel = new Label
-        {
-            Text = "",
-            AutoSize = false,
-            ForeColor = Color.White,
-            Font = new Font(Font.FontFamily, 10.5F, FontStyle.Bold),
-            Location = new Point(124, 14),
-            Size = new Size(420, 24),
-            BackColor = Color.Transparent
-        };
-
-        codexStateLabel = new Label
-        {
-            Text = "",
-            AutoSize = false,
-            ForeColor = Color.FromArgb(128, 240, 192),
-            Location = new Point(20, 46),
-            Size = new Size(104, 20),
-            BackColor = Color.Transparent
-        };
-
-        codexPathLabel = new Label
-        {
-            AutoSize = false,
-            ForeColor = Color.FromArgb(218, 228, 244),
-            Location = new Point(124, 44),
-            Size = new Size(430, 24),
-            BackColor = Color.Transparent
-        };
-
-        statusPanel.Controls.Add(proxyTitleLabel);
-        statusPanel.Controls.Add(proxyLabel);
-        statusPanel.Controls.Add(codexStateLabel);
-        statusPanel.Controls.Add(codexPathLabel);
 
         var nativeButton = new ModeButton
         {
             Title = "原生启动",
             Caption = "不注入代理环境变量",
             Text = "原生启动",
-            Location = new Point(34, 236),
-            Size = new Size(278, 74),
-            AccentColor = Color.FromArgb(116, 151, 255),
-            AccentColor2 = Color.FromArgb(92, 220, 255)
+            Location = new Point(36, 228),
+            Size = new Size(292, 76),
+            AccentColor = Color.FromArgb(91, 141, 239),
+            AccentColor2 = Color.FromArgb(59, 196, 221)
         };
         nativeButton.Click += (_, _) => Launch("Native");
 
@@ -168,26 +75,30 @@ internal sealed class LauncherForm : Form
             Title = "VPN 启动",
             Caption = "为本次 Codex 注入本地代理",
             Text = "VPN 启动",
-            Location = new Point(348, 236),
-            Size = new Size(278, 74),
-            AccentColor = Color.FromArgb(90, 230, 180),
-            AccentColor2 = Color.FromArgb(120, 160, 255)
+            Location = new Point(352, 228),
+            Size = new Size(292, 76),
+            AccentColor = Color.FromArgb(64, 216, 172),
+            AccentColor2 = Color.FromArgb(88, 145, 242)
         };
         vpnButton.Click += (_, _) => Launch("Vpn");
 
         var changePortButton = new GlassButton
         {
             Text = "修改端口",
-            Location = new Point(34, 330),
-            Size = new Size(132, 36)
+            Location = new Point(36, 326),
+            Size = new Size(124, 34),
+            SurfaceColor = Color.FromArgb(30, 42, 61),
+            AccentColor = Color.FromArgb(82, 211, 190)
         };
         changePortButton.Click += (_, _) => ChangePort();
 
         var openConfigButton = new GlassButton
         {
             Text = "打开配置目录",
-            Location = new Point(180, 330),
-            Size = new Size(144, 36)
+            Location = new Point(174, 326),
+            Size = new Size(142, 34),
+            SurfaceColor = Color.FromArgb(30, 42, 61),
+            AccentColor = Color.FromArgb(132, 170, 248)
         };
         openConfigButton.Click += (_, _) => Process.Start(new ProcessStartInfo
         {
@@ -200,7 +111,7 @@ internal sealed class LauncherForm : Form
             Text = "from hloolx",
             AutoSize = false,
             TextAlign = ContentAlignment.MiddleRight,
-            Location = new Point(474, 336),
+            Location = new Point(492, 330),
             Size = new Size(152, 24),
             LinkColor = Color.FromArgb(153, 216, 255),
             ActiveLinkColor = Color.White,
@@ -219,17 +130,11 @@ internal sealed class LauncherForm : Form
             });
         };
 
-        card.Controls.Add(logo);
-        card.Controls.Add(eyebrow);
-        card.Controls.Add(title);
-        card.Controls.Add(note);
-        card.Controls.Add(statusPanel);
-        card.Controls.Add(nativeButton);
-        card.Controls.Add(vpnButton);
-        card.Controls.Add(changePortButton);
-        card.Controls.Add(openConfigButton);
-        card.Controls.Add(authorLink);
-        Controls.Add(card);
+        Controls.Add(nativeButton);
+        Controls.Add(vpnButton);
+        Controls.Add(changePortButton);
+        Controls.Add(openConfigButton);
+        Controls.Add(authorLink);
 
         RefreshStatus();
     }
@@ -248,41 +153,65 @@ internal sealed class LauncherForm : Form
 
         using var background = new LinearGradientBrush(
             ClientRectangle,
-            Color.FromArgb(12, 16, 30),
-            Color.FromArgb(33, 45, 76),
+            Color.FromArgb(9, 15, 28),
+            Color.FromArgb(18, 28, 48),
             32F);
         e.Graphics.FillRectangle(background, ClientRectangle);
 
-        using var sheen = new LinearGradientBrush(
-            new Rectangle(0, 0, ClientSize.Width, ClientSize.Height),
-            Color.FromArgb(42, 78, 194, 255),
-            Color.FromArgb(0, 255, 255, 255),
-            120F);
-        e.Graphics.FillRectangle(sheen, ClientRectangle);
-
-        using var linePen = new Pen(Color.FromArgb(24, 255, 255, 255), 1F);
-        for (var y = 34; y < ClientSize.Height; y += 42)
+        using var gridPen = new Pen(Color.FromArgb(16, 154, 191, 255), 1F);
+        for (var y = 34; y < ClientSize.Height; y += 44)
         {
-            e.Graphics.DrawLine(linePen, 0, y, ClientSize.Width, y + 18);
+            e.Graphics.DrawLine(gridPen, 0, y, ClientSize.Width, y);
         }
+
+        var shell = new Rectangle(24, 24, 632, 342);
+        using var shellPath = DrawingHelpers.RoundRect(shell, 22);
+        using var shellBrush = new LinearGradientBrush(shell, Color.FromArgb(26, 37, 56), Color.FromArgb(18, 26, 42), 90F);
+        using var shellBorder = new Pen(Color.FromArgb(78, 120, 151, 190), 1F);
+        e.Graphics.FillPath(shellBrush, shellPath);
+        e.Graphics.DrawPath(shellBorder, shellPath);
+
+        DrawingHelpers.DrawCloudLogo(e.Graphics, new Rectangle(46, 50, 58, 58), includeBadge: true);
+
+        using var eyebrowFont = new Font(Font.FontFamily, 9.25F, FontStyle.Regular);
+        using var titleFont = new Font(Font.FontFamily, 20F, FontStyle.Bold);
+        using var proxyFont = new Font(Font.FontFamily, 10.75F, FontStyle.Bold);
+
+        TextRenderer.DrawText(e.Graphics, "Windows Codex network launcher", eyebrowFont, new Rectangle(124, 48, 430, 22), Color.FromArgb(153, 197, 235), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(e.Graphics, "Codex Proxy Switcher", titleFont, new Rectangle(122, 72, 470, 38), Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(e.Graphics, "选择原生或 VPN 模式启动 Codex，避免旧进程复用错误网络环境。", Font, new Rectangle(124, 110, 500, 22), Color.FromArgb(194, 210, 232), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+
+        var status = new Rectangle(36, 146, 608, 60);
+        using var statusPath = DrawingHelpers.RoundRect(status, 16);
+        using var statusBrush = new LinearGradientBrush(status, Color.FromArgb(34, 47, 69), Color.FromArgb(27, 38, 58), 90F);
+        using var statusBorder = new Pen(Color.FromArgb(74, 113, 139, 170), 1F);
+        e.Graphics.FillPath(statusBrush, statusPath);
+        e.Graphics.DrawPath(statusBorder, statusPath);
+
+        TextRenderer.DrawText(e.Graphics, "当前代理", Font, new Rectangle(58, 156, 84, 20), Color.FromArgb(151, 174, 205), TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+        TextRenderer.DrawText(e.Graphics, proxyText, proxyFont, new Rectangle(148, 154, 438, 24), Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(e.Graphics, codexStateText, Font, new Rectangle(58, 180, 84, 20), codexStateColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+        TextRenderer.DrawText(e.Graphics, codexPathText, Font, new Rectangle(148, 180, 470, 20), Color.FromArgb(212, 224, 241), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
     private void RefreshStatus()
     {
-        proxyLabel.Text = configStore.Settings.ProxyUrl;
+        proxyText = configStore.Settings.ProxyUrl;
 
         var codexPath = CodexFinder.TryFindCodexExePath();
         if (string.IsNullOrWhiteSpace(codexPath))
         {
-            codexStateLabel.Text = "Codex";
-            codexStateLabel.ForeColor = Color.FromArgb(255, 196, 128);
-            codexPathLabel.Text = "未找到 Windows 商店版 Codex";
+            codexStateText = "Codex";
+            codexStateColor = Color.FromArgb(255, 196, 128);
+            codexPathText = "未找到 Windows 商店版 Codex";
+            Invalidate();
             return;
         }
 
-        codexStateLabel.Text = "已找到";
-        codexStateLabel.ForeColor = Color.FromArgb(128, 240, 192);
-        codexPathLabel.Text = CompactPath(codexPath, 70);
+        codexStateText = "已找到";
+        codexStateColor = Color.FromArgb(126, 231, 190);
+        codexPathText = CompactPath(codexPath, 62);
+        Invalidate();
     }
 
     private void ChangePort()
@@ -443,15 +372,25 @@ internal class GlassButton : Button
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Color AccentColor { get; set; } = Color.FromArgb(132, 196, 255);
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color SurfaceColor { get; set; } = Color.FromArgb(30, 42, 61);
+
     public GlassButton()
     {
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
-        BackColor = Color.Transparent;
+        BackColor = Color.FromArgb(11, 18, 32);
         ForeColor = Color.White;
         Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
         Cursor = Cursors.Hand;
-        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        using var path = DrawingHelpers.RoundRect(new Rectangle(0, 0, Width, Height), 12);
+        Region = new Region(path);
     }
 
     protected override void OnMouseEnter(EventArgs e)
@@ -487,27 +426,32 @@ internal class GlassButton : Button
     {
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         var rect = new Rectangle(0, 0, Width - 1, Height - 1);
-        var alpha = pressing ? 74 : hovering ? 66 : 42;
+        var top = pressing ? DrawingHelpers.Mix(SurfaceColor, Color.Black, 0.10F) : hovering ? DrawingHelpers.Mix(SurfaceColor, AccentColor, 0.18F) : SurfaceColor;
+        var bottom = DrawingHelpers.Mix(top, Color.Black, 0.22F);
 
         using var path = DrawingHelpers.RoundRect(rect, 13);
-        using var brush = new SolidBrush(Color.FromArgb(alpha, 255, 255, 255));
-        using var pen = new Pen(Color.FromArgb(hovering ? 135 : 74, AccentColor), 1F);
+        using var brush = new LinearGradientBrush(
+            rect,
+            top,
+            bottom,
+            90F);
+        using var pen = new Pen(Color.FromArgb(hovering ? 170 : 112, AccentColor), 1F);
 
         e.Graphics.FillPath(brush, path);
         e.Graphics.DrawPath(pen, path);
 
-        TextRenderer.DrawText(
-            e.Graphics,
-            Text,
-            Font,
-            rect,
-            ForeColor,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        using var shine = new Pen(Color.FromArgb(70, 255, 255, 255), 1F);
+        e.Graphics.DrawLine(shine, 14, 1, Width - 14, 1);
+
+        TextRenderer.DrawText(e.Graphics, Text, Font, rect, ForeColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 }
 
-internal sealed class ModeButton : GlassButton
+internal sealed class ModeButton : Control
 {
+    private bool hovering;
+    private bool pressing;
+
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string Title { get; set; } = "";
 
@@ -515,7 +459,54 @@ internal sealed class ModeButton : GlassButton
     public string Caption { get; set; } = "";
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color AccentColor { get; set; } = Color.FromArgb(91, 141, 239);
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Color AccentColor2 { get; set; } = Color.FromArgb(125, 255, 220);
+
+    public ModeButton()
+    {
+        Cursor = Cursors.Hand;
+        ForeColor = Color.White;
+        Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        using var path = DrawingHelpers.RoundRect(new Rectangle(0, 0, Width, Height), 18);
+        Region = new Region(path);
+    }
+
+    protected override void OnMouseEnter(EventArgs e)
+    {
+        hovering = true;
+        Invalidate();
+        base.OnMouseEnter(e);
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        hovering = false;
+        pressing = false;
+        Invalidate();
+        base.OnMouseLeave(e);
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        pressing = true;
+        Invalidate();
+        base.OnMouseDown(e);
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        pressing = false;
+        Invalidate();
+        base.OnMouseUp(e);
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -523,21 +514,39 @@ internal sealed class ModeButton : GlassButton
         var rect = new Rectangle(0, 0, Width - 1, Height - 1);
 
         using var path = DrawingHelpers.RoundRect(rect, 20);
-        using var baseBrush = new SolidBrush(Color.FromArgb(46, 255, 255, 255));
-        e.Graphics.FillPath(baseBrush, path);
+        var surfaceTop = pressing ? Color.FromArgb(26, 36, 54) : hovering ? Color.FromArgb(42, 58, 84) : Color.FromArgb(33, 46, 68);
+        var surfaceBottom = pressing ? Color.FromArgb(21, 30, 46) : hovering ? Color.FromArgb(31, 45, 69) : Color.FromArgb(24, 35, 54);
+        using var surface = new LinearGradientBrush(rect, surfaceTop, surfaceBottom, 90F);
+        e.Graphics.FillPath(surface, path);
 
-        using var accent = new LinearGradientBrush(rect, Color.FromArgb(126, AccentColor), Color.FromArgb(74, AccentColor2), 24F);
-        e.Graphics.FillPath(accent, path);
+        using var accent = new LinearGradientBrush(
+            rect,
+            Color.FromArgb(255, AccentColor),
+            Color.FromArgb(255, AccentColor2),
+            30F);
+        using var accentPath = DrawingHelpers.RoundRect(new Rectangle(0, 0, 7, Height - 1), 8);
+        e.Graphics.FillPath(accent, accentPath);
 
-        using var pen = new Pen(Color.FromArgb(112, 255, 255, 255), 1F);
+        var iconBounds = new Rectangle(22, 18, 40, 40);
+        using var iconFill = new LinearGradientBrush(iconBounds, AccentColor, AccentColor2, LinearGradientMode.ForwardDiagonal);
+        e.Graphics.FillEllipse(iconFill, iconBounds);
+        using var iconPen = new Pen(Color.White, 2.4F) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        e.Graphics.DrawLine(iconPen, iconBounds.Left + 14, iconBounds.Top + 14, iconBounds.Left + 22, iconBounds.Top + 20);
+        e.Graphics.DrawLine(iconPen, iconBounds.Left + 22, iconBounds.Top + 20, iconBounds.Left + 14, iconBounds.Top + 26);
+        e.Graphics.DrawLine(iconPen, iconBounds.Left + 24, iconBounds.Top + 25, iconBounds.Left + 31, iconBounds.Top + 25);
+
+        using var pen = new Pen(Color.FromArgb(hovering ? 156 : 92, 148, 177, 213), 1F);
         e.Graphics.DrawPath(pen, path);
 
-        var titleRect = new Rectangle(22, 15, Width - 44, 26);
-        var captionRect = new Rectangle(22, 42, Width - 44, 20);
+        using var shine = new Pen(Color.FromArgb(44, 255, 255, 255), 1F);
+        e.Graphics.DrawLine(shine, 22, 1, Width - 22, 1);
+
+        var titleRect = new Rectangle(78, 17, Width - 104, 25);
+        var captionRect = new Rectangle(78, 43, Width - 104, 20);
         using var titleFont = new Font(Font.FontFamily, 12F, FontStyle.Bold);
 
         TextRenderer.DrawText(e.Graphics, Title, titleFont, titleRect, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-        TextRenderer.DrawText(e.Graphics, Caption, Font, captionRect, Color.FromArgb(230, 243, 255), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(e.Graphics, Caption, Font, captionRect, Color.FromArgb(190, 209, 232), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 }
 
@@ -625,6 +634,7 @@ internal static class DrawingHelpers
 
     public static GraphicsPath RoundRect(Rectangle bounds, int radius)
     {
+        radius = Math.Max(1, Math.Min(radius, Math.Min(bounds.Width, bounds.Height) / 2));
         var diameter = radius * 2;
         var path = new GraphicsPath();
         var arc = new Rectangle(bounds.Location, new Size(diameter, diameter));
@@ -640,6 +650,17 @@ internal static class DrawingHelpers
 
         return path;
     }
+
+    public static Color Mix(Color first, Color second, float amount)
+    {
+        amount = Math.Clamp(amount, 0F, 1F);
+        var inverse = 1F - amount;
+        return Color.FromArgb(
+            (int)(first.A * inverse + second.A * amount),
+            (int)(first.R * inverse + second.R * amount),
+            (int)(first.G * inverse + second.G * amount),
+            (int)(first.B * inverse + second.B * amount));
+    }
 }
 
 internal sealed class ProxySetupForm : Form
@@ -651,6 +672,7 @@ internal sealed class ProxySetupForm : Form
     public ProxySetupForm(int suggestedPort)
     {
         Text = "配置代理端口";
+        AutoScaleMode = AutoScaleMode.None;
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -810,6 +832,7 @@ internal sealed class LauncherConfigStore
                 ProxyPort = setupForm.ProxyPort
             };
             Save(settingsPath, settings);
+            PromptForDesktopShortcut(settingsPath, settings);
         }
 
         return new LauncherConfigStore(configDirectory, settingsPath, settings);
@@ -847,6 +870,46 @@ internal sealed class LauncherConfigStore
     {
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
         File.WriteAllText(settingsPath, JsonSerializer.Serialize(settings, JsonOptions));
+    }
+
+    private static void PromptForDesktopShortcut(string settingsPath, LauncherSettings settings)
+    {
+        if (settings.DesktopShortcutPrompted)
+        {
+            return;
+        }
+
+        settings.DesktopShortcutPrompted = true;
+        Save(settingsPath, settings);
+
+        var result = MessageBox.Show(
+            "是否添加桌面快捷方式？以后可以直接从桌面打开 Codex Proxy Switcher。",
+            "添加桌面快捷方式",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (result != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            DesktopShortcutManager.CreateOrUpdate();
+            MessageBox.Show(
+                "已添加桌面快捷方式。",
+                "Codex Proxy Switcher",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "创建桌面快捷方式失败：\n" + ex.Message,
+                "Codex Proxy Switcher",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
     }
 
     private static void MigrateLegacySettings(string settingsPath)
@@ -916,7 +979,103 @@ internal sealed class LauncherSettings
 
     public int ProxyPort { get; set; } = 7897;
 
+    public bool DesktopShortcutPrompted { get; set; }
+
     public string ProxyUrl => $"{ProxyScheme}://{ProxyHost}:{ProxyPort}";
+}
+
+internal static class DesktopShortcutManager
+{
+    public static void CreateOrUpdate()
+    {
+        var desktopDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        var shortcutPath = Path.Combine(desktopDirectory, "Codex Proxy Switcher.lnk");
+        var executablePath = Application.ExecutablePath;
+        var workingDirectory = Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory;
+
+        object shellLinkObject = new ShellLink();
+        var shellLink = (IShellLinkW)shellLinkObject;
+        try
+        {
+            shellLink.SetPath(executablePath);
+            shellLink.SetWorkingDirectory(workingDirectory);
+            shellLink.SetDescription("Start Codex Desktop with optional process-local proxy.");
+            shellLink.SetIconLocation(executablePath, 0);
+
+            var persistFile = (IPersistFile)shellLink;
+            persistFile.Save(shortcutPath, true);
+        }
+        finally
+        {
+            Marshal.FinalReleaseComObject(shellLinkObject);
+        }
+    }
+
+    [ComImport]
+    [Guid("00021401-0000-0000-C000-000000000046")]
+    private sealed class ShellLink
+    {
+    }
+
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("000214F9-0000-0000-C000-000000000046")]
+    private interface IShellLinkW
+    {
+        void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszFile, int cchMaxPath, IntPtr pfd, uint fFlags);
+
+        void GetIDList(out IntPtr ppidl);
+
+        void SetIDList(IntPtr pidl);
+
+        void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszName, int cchMaxName);
+
+        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string pszName);
+
+        void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszDir, int cchMaxPath);
+
+        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string pszDir);
+
+        void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszArgs, int cchMaxPath);
+
+        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string pszArgs);
+
+        void GetHotkey(out short pwHotkey);
+
+        void SetHotkey(short wHotkey);
+
+        void GetShowCmd(out int piShowCmd);
+
+        void SetShowCmd(int iShowCmd);
+
+        void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszIconPath, int cchIconPath, out int piIcon);
+
+        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string pszIconPath, int iIcon);
+
+        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathRel, uint dwReserved);
+
+        void Resolve(IntPtr hwnd, uint fFlags);
+
+        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
+    }
+
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("0000010B-0000-0000-C000-000000000046")]
+    private interface IPersistFile
+    {
+        void GetClassID(out Guid pClassID);
+
+        void IsDirty();
+
+        void Load([MarshalAs(UnmanagedType.LPWStr)] string pszFileName, uint dwMode);
+
+        void Save([MarshalAs(UnmanagedType.LPWStr)] string pszFileName, bool fRemember);
+
+        void SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string pszFileName);
+
+        void GetCurFile([MarshalAs(UnmanagedType.LPWStr)] out string ppszFileName);
+    }
 }
 
 internal static class CodexFinder
