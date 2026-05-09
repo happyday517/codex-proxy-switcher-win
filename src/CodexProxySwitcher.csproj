@@ -10,5 +10,10 @@
     <Product>Codex Proxy Switcher for Windows</Product>
     <Authors>hloolx</Authors>
     <Description>A lightweight Windows launcher for starting Codex Desktop with optional process-local proxy environment variables.</Description>
+    <ApplicationIcon>assets\CodexProxySwitcher.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="assets\CodexProxySwitcher.ico" />
+  </ItemGroup>
 </Project>
