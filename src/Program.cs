@@ -4,6 +4,7 @@ using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Xml.Linq;
 
 namespace CodexProxySwitcher;
 
@@ -231,9 +232,9 @@ internal sealed class LauncherForm : Form
     {
         try
         {
-            var codexExePath = CodexFinder.FindCodexExePath();
+            var codexInstall = CodexFinder.FindCodexInstall();
             StopExistingCodex();
-            StartCodex(codexExePath, mode, configStore.Settings.ProxyUrl);
+            StartCodex(codexInstall, mode, configStore.Settings.ProxyUrl);
             Close();
         }
         catch (Exception ex)
@@ -261,11 +262,23 @@ internal sealed class LauncherForm : Form
         Thread.Sleep(500);
     }
 
-    private static void StartCodex(string codexExePath, string mode, string proxyUrl)
+    private static void StartCodex(CodexInstallInfo codexInstall, string mode, string proxyUrl)
+    {
+        try
+        {
+            StartCodexDirect(codexInstall.ExePath, mode, proxyUrl);
+        }
+        catch (Exception ex) when (CanFallbackToPackagedActivation(ex, codexInstall))
+        {
+            StartCodexViaPackagedActivation(codexInstall.AppUserModelId!, mode, proxyUrl);
+        }
+    }
+
+    private static void StartCodexDirect(string codexExePath, string mode, string proxyUrl)
     {
         var processInfo = new ProcessStartInfo(codexExePath)
         {
-            WorkingDirectory = Path.GetDirectoryName(codexExePath) ?? AppContext.BaseDirectory,
+            WorkingDirectory = GetLaunchWorkingDirectory(codexExePath),
             UseShellExecute = false
         };
 
@@ -283,6 +296,52 @@ internal sealed class LauncherForm : Form
         }
 
         Process.Start(processInfo);
+    }
+
+    private static bool CanFallbackToPackagedActivation(Exception ex, CodexInstallInfo codexInstall)
+    {
+        return !string.IsNullOrWhiteSpace(codexInstall.AppUserModelId)
+            && ex is Win32Exception { NativeErrorCode: 5 };
+    }
+
+    private static void StartCodexViaPackagedActivation(string appUserModelId, string mode, string proxyUrl)
+    {
+        if (!string.Equals(mode, "Vpn", StringComparison.OrdinalIgnoreCase))
+        {
+            PackagedAppLauncher.Activate(appUserModelId);
+            return;
+        }
+
+        var proxyVariables = new Dictionary<string, string?>
+        {
+            ["HTTP_PROXY"] = proxyUrl,
+            ["HTTPS_PROXY"] = proxyUrl,
+            ["ALL_PROXY"] = proxyUrl,
+            ["NO_PROXY"] = NoProxy
+        };
+
+        using var _ = new TemporaryUserEnvironment(proxyVariables);
+        PackagedAppLauncher.Activate(appUserModelId);
+    }
+
+    private static string GetLaunchWorkingDirectory(string codexExePath)
+    {
+        var exeDirectory = Path.GetDirectoryName(codexExePath);
+        if (string.IsNullOrWhiteSpace(exeDirectory))
+        {
+            return AppContext.BaseDirectory;
+        }
+
+        var windowsAppsPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            "WindowsApps");
+
+        if (codexExePath.StartsWith(windowsAppsPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return AppContext.BaseDirectory;
+        }
+
+        return Directory.Exists(exeDirectory) ? exeDirectory : AppContext.BaseDirectory;
     }
 
     private static string CompactPath(string path, int maxLength)
@@ -984,6 +1043,126 @@ internal sealed class LauncherSettings
     public string ProxyUrl => $"{ProxyScheme}://{ProxyHost}:{ProxyPort}";
 }
 
+internal sealed class CodexInstallInfo
+{
+    public CodexInstallInfo(string exePath, string? appUserModelId)
+    {
+        ExePath = exePath;
+        AppUserModelId = appUserModelId;
+    }
+
+    public string ExePath { get; }
+
+    public string? AppUserModelId { get; }
+}
+
+internal sealed class TemporaryUserEnvironment : IDisposable
+{
+    private readonly Dictionary<string, string?> previousValues = new(StringComparer.OrdinalIgnoreCase);
+
+    public TemporaryUserEnvironment(IReadOnlyDictionary<string, string?> values)
+    {
+        foreach (var (key, value) in values)
+        {
+            previousValues[key] = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User);
+            Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.User);
+        }
+
+        EnvironmentChangeBroadcaster.Broadcast();
+    }
+
+    public void Dispose()
+    {
+        foreach (var (key, value) in previousValues)
+        {
+            Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.User);
+        }
+
+        EnvironmentChangeBroadcaster.Broadcast();
+    }
+}
+
+internal static class EnvironmentChangeBroadcaster
+{
+    private static readonly IntPtr HwndBroadcast = new(0xffff);
+    private const int WmSettingChange = 0x001A;
+    private const int SmtoAbortIfHung = 0x0002;
+
+    public static void Broadcast()
+    {
+        SendMessageTimeout(
+            HwndBroadcast,
+            WmSettingChange,
+            UIntPtr.Zero,
+            "Environment",
+            SmtoAbortIfHung,
+            5000,
+            out _);
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr SendMessageTimeout(
+        IntPtr hWnd,
+        int msg,
+        UIntPtr wParam,
+        string lParam,
+        int fuFlags,
+        int uTimeout,
+        out UIntPtr lpdwResult);
+}
+
+internal static class PackagedAppLauncher
+{
+    public static void Activate(string appUserModelId)
+    {
+        object managerObject = new ApplicationActivationManager();
+        var manager = (IApplicationActivationManager)managerObject;
+        try
+        {
+            var hr = manager.ActivateApplication(appUserModelId, null, ActivateOptions.None, out _);
+            if (hr < 0)
+            {
+                Marshal.ThrowExceptionForHR(hr);
+            }
+        }
+        finally
+        {
+            Marshal.FinalReleaseComObject(managerObject);
+        }
+    }
+
+    [Flags]
+    private enum ActivateOptions
+    {
+        None = 0
+    }
+
+    [ComImport]
+    [Guid("45BA127D-10A8-46EA-8AB7-56EA9078943C")]
+    private sealed class ApplicationActivationManager
+    {
+    }
+
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("2e941141-7f97-4756-ba1d-9decde894a3d")]
+    private interface IApplicationActivationManager
+    {
+        [PreserveSig]
+        int ActivateApplication(
+            [MarshalAs(UnmanagedType.LPWStr)] string appUserModelId,
+            [MarshalAs(UnmanagedType.LPWStr)] string? arguments,
+            ActivateOptions options,
+            out uint processId);
+
+        [PreserveSig]
+        int ActivateForFile(IntPtr appUserModelId, IntPtr itemArray, string verb, out uint processId);
+
+        [PreserveSig]
+        int ActivateForProtocol(IntPtr appUserModelId, IntPtr itemArray, out uint processId);
+    }
+}
+
 internal static class DesktopShortcutManager
 {
     public static void CreateOrUpdate()
@@ -1080,23 +1259,33 @@ internal static class DesktopShortcutManager
 
 internal static class CodexFinder
 {
-    public static string FindCodexExePath()
+    public static CodexInstallInfo FindCodexInstall()
     {
-        var codexPath = TryFindCodexExePath();
-        if (!string.IsNullOrWhiteSpace(codexPath))
+        var codexInstall = TryFindCodexInstall();
+        if (codexInstall is not null)
         {
-            return codexPath;
+            return codexInstall;
         }
 
         throw new InvalidOperationException("没有找到 Windows 商店版 Codex。请确认这台电脑已经安装 Codex。");
     }
 
+    public static string FindCodexExePath()
+    {
+        return FindCodexInstall().ExePath;
+    }
+
     public static string? TryFindCodexExePath()
+    {
+        return TryFindCodexInstall()?.ExePath;
+    }
+
+    public static CodexInstallInfo? TryFindCodexInstall()
     {
         return FindCodexViaAppxPackage() ?? FindCodexViaWindowsApps();
     }
 
-    private static string? FindCodexViaAppxPackage()
+    private static CodexInstallInfo? FindCodexViaAppxPackage()
     {
         try
         {
@@ -1110,7 +1299,7 @@ internal static class CodexFinder
 
             processInfo.ArgumentList.Add("-NoProfile");
             processInfo.ArgumentList.Add("-Command");
-            processInfo.ArgumentList.Add("(Get-AppxPackage -Name OpenAI.Codex | Sort-Object Version -Descending | Select-Object -First 1).InstallLocation");
+            processInfo.ArgumentList.Add("$pkg = Get-AppxPackage -Name OpenAI.Codex | Sort-Object Version -Descending | Select-Object -First 1; if ($pkg) { [pscustomobject]@{ InstallLocation = $pkg.InstallLocation; PackageFamilyName = $pkg.PackageFamilyName } | ConvertTo-Json -Compress }");
 
             using var process = Process.Start(processInfo);
             if (process is null)
@@ -1126,8 +1315,27 @@ internal static class CodexFinder
                 return null;
             }
 
-            var exePath = Path.Combine(output, "app", "Codex.exe");
-            return File.Exists(exePath) ? exePath : null;
+            using var document = JsonDocument.Parse(output);
+            var root = document.RootElement;
+            var installLocation = root.TryGetProperty("InstallLocation", out var installLocationElement)
+                ? installLocationElement.GetString()
+                : null;
+            var packageFamilyName = root.TryGetProperty("PackageFamilyName", out var packageFamilyNameElement)
+                ? packageFamilyNameElement.GetString()
+                : null;
+
+            if (string.IsNullOrWhiteSpace(installLocation))
+            {
+                return null;
+            }
+
+            var exePath = Path.Combine(installLocation, "app", "Codex.exe");
+            var appId = TryReadApplicationId(installLocation) ?? "App";
+            var appUserModelId = string.IsNullOrWhiteSpace(packageFamilyName)
+                ? null
+                : $"{packageFamilyName}!{appId}";
+
+            return new CodexInstallInfo(exePath, appUserModelId);
         }
         catch
         {
@@ -1135,7 +1343,7 @@ internal static class CodexFinder
         }
     }
 
-    private static string? FindCodexViaWindowsApps()
+    private static CodexInstallInfo? FindCodexViaWindowsApps()
     {
         try
         {
@@ -1159,11 +1367,52 @@ internal static class CodexFinder
             }
 
             var exePath = Path.Combine(packagePath, "app", "Codex.exe");
-            return File.Exists(exePath) ? exePath : null;
+            if (!File.Exists(exePath))
+            {
+                return null;
+            }
+
+            return new CodexInstallInfo(exePath, TryBuildAppUserModelId(packagePath));
         }
         catch
         {
             return null;
         }
+    }
+
+    private static string? TryReadApplicationId(string installLocation)
+    {
+        try
+        {
+            var manifestPath = Path.Combine(installLocation, "AppxManifest.xml");
+            if (!File.Exists(manifestPath))
+            {
+                return null;
+            }
+
+            var manifest = XDocument.Load(manifestPath);
+            return manifest
+                .Descendants()
+                .FirstOrDefault(element => element.Name.LocalName == "Application")
+                ?.Attribute("Id")
+                ?.Value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? TryBuildAppUserModelId(string packagePath)
+    {
+        var packageName = Path.GetFileName(packagePath);
+        var publisherSeparator = packageName.LastIndexOf("__", StringComparison.Ordinal);
+        if (publisherSeparator < 0 || publisherSeparator + 2 >= packageName.Length)
+        {
+            return null;
+        }
+
+        var publisherId = packageName[(publisherSeparator + 2)..];
+        return $"OpenAI.Codex_{publisherId}!{TryReadApplicationId(packagePath) ?? "App"}";
     }
 }

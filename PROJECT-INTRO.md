@@ -17,8 +17,9 @@ from [hloolx](https://github.com/hloolx)
 2. 程序会把端口保存到当前用户目录：
    `%APPDATA%\CodexProxySwitcher\settings.json`
 3. 之后每次打开都会自动读取这个端口。
-4. 启动时自动查询这台电脑上的 Windows 商店版 Codex 安装位置。
-5. 首次配置完成后可选择创建桌面快捷方式，只提示一次。
+4. 启动时自动查询这台电脑上的 Windows 商店版 Codex 安装位置和 AppUserModelID。
+5. 如果 WindowsApps 权限拒绝直接启动，会自动改用系统应用激活方式。
+6. 首次配置完成后可选择创建桌面快捷方式，只提示一次。
 
 因此，同一个 exe 拷到另一台 Windows 电脑后，第一次运行会让那台电脑的用户输入自己的代理端口，后续就不用重复输入。
 
@@ -26,9 +27,11 @@ from [hloolx](https://github.com/hloolx)
 
 启动器会按顺序尝试：
 
-1. 通过 PowerShell 的 `Get-AppxPackage -Name OpenAI.Codex` 查询安装目录。
-2. 在 `C:\Program Files\WindowsApps` 中查找 `OpenAI.Codex_*_x64__2p2nqsd0c76g0`。
-3. 在安装目录下启动 `app\Codex.exe`。
+1. 通过 PowerShell 的 `Get-AppxPackage -Name OpenAI.Codex` 查询安装目录和 Package Family Name。
+2. 读取 `AppxManifest.xml` 获取 Application Id，生成类似 `OpenAI.Codex_2p2nqsd0c76g0!App` 的 AppUserModelID。
+3. 优先直接启动安装目录下的 `app\Codex.exe`，并注入进程级代理环境变量。
+4. 如果 WindowsApps 权限导致直接启动“拒绝访问”，自动改用 AppUserModelID 激活 Codex。
+5. 如果 Appx 查询失败，再在 `C:\Program Files\WindowsApps` 中查找 `OpenAI.Codex_*_x64__2p2nqsd0c76g0`。
 
 如果 Codex 官方后续更改包名或目录结构，可能需要更新匹配规则。
 
@@ -39,9 +42,12 @@ from [hloolx](https://github.com/hloolx)
 - 启动后长时间显示 `Reconnecting`。
 - 聊天或执行任务时反复断线。
 - 代理软件可用，但 Codex 桌面端没有自动使用它。
+- 新安装电脑启动 WindowsApps 里的 `Codex.exe` 时提示“拒绝访问”。
 - 用户不想修改 Windows 全局代理，只想让 Codex 单独走代理。
 
 它通过“进程级环境变量”实现，只影响由启动器启动的 Codex 进程。
+
+如果 WindowsApps 权限阻止直接创建 Codex 进程，VPN 模式会短暂设置当前用户级代理环境变量，激活 Codex 后立即恢复原值，用来兼容更严格的新安装环境。
 
 ## API Key 登录说明
 
