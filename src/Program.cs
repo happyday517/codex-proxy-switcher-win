@@ -35,6 +35,14 @@ internal static class Program
 internal sealed class LauncherForm : Form
 {
     private const string NoProxy = "localhost,127.0.0.1,::1";
+    private const string ProjectUrl = "https://github.com/hloolx/codex-proxy-switcher-win";
+    private static readonly string[] ProxyEnvironmentKeys =
+    {
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY"
+    };
 
     private readonly LauncherConfigStore configStore;
     private string proxyText = "";
@@ -109,7 +117,7 @@ internal sealed class LauncherForm : Form
 
         var authorLink = new LinkLabel
         {
-            Text = "from hloolx",
+            Text = "project repo",
             AutoSize = false,
             TextAlign = ContentAlignment.MiddleRight,
             Location = new Point(492, 330),
@@ -120,10 +128,10 @@ internal sealed class LauncherForm : Form
             ForeColor = Color.FromArgb(153, 216, 255),
             BackColor = Color.Transparent
         };
-        authorLink.Links.Add(5, 5, "https://github.com/hloolx");
+        authorLink.Links.Add(0, authorLink.Text.Length, ProjectUrl);
         authorLink.LinkClicked += (_, e) =>
         {
-            var url = e.Link?.LinkData?.ToString() ?? "https://github.com/hloolx";
+            var url = e.Link?.LinkData?.ToString() ?? ProjectUrl;
             Process.Start(new ProcessStartInfo
             {
                 FileName = url,
@@ -264,14 +272,13 @@ internal sealed class LauncherForm : Form
 
     private static void StartCodex(CodexInstallInfo codexInstall, string mode, string proxyUrl)
     {
-        try
+        if (!string.IsNullOrWhiteSpace(codexInstall.AppUserModelId))
         {
-            StartCodexDirect(codexInstall.ExePath, mode, proxyUrl);
+            StartCodexViaPackagedActivation(codexInstall.AppUserModelId, mode, proxyUrl);
+            return;
         }
-        catch (Exception ex) when (CanFallbackToPackagedActivation(ex, codexInstall))
-        {
-            StartCodexViaPackagedActivation(codexInstall.AppUserModelId!, mode, proxyUrl);
-        }
+
+        StartCodexDirect(codexInstall.ExePath, mode, proxyUrl);
     }
 
     private static void StartCodexDirect(string codexExePath, string mode, string proxyUrl)
@@ -282,46 +289,44 @@ internal sealed class LauncherForm : Form
             UseShellExecute = false
         };
 
-        foreach (var key in new[] { "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY" })
-        {
-            processInfo.Environment.Remove(key);
-        }
-
-        if (string.Equals(mode, "Vpn", StringComparison.OrdinalIgnoreCase))
-        {
-            processInfo.Environment["HTTP_PROXY"] = proxyUrl;
-            processInfo.Environment["HTTPS_PROXY"] = proxyUrl;
-            processInfo.Environment["ALL_PROXY"] = proxyUrl;
-            processInfo.Environment["NO_PROXY"] = NoProxy;
-        }
+        ApplyLaunchEnvironment(processInfo.Environment, BuildLaunchEnvironment(mode, proxyUrl));
 
         Process.Start(processInfo);
     }
 
-    private static bool CanFallbackToPackagedActivation(Exception ex, CodexInstallInfo codexInstall)
-    {
-        return !string.IsNullOrWhiteSpace(codexInstall.AppUserModelId)
-            && ex is Win32Exception { NativeErrorCode: 5 };
-    }
-
     private static void StartCodexViaPackagedActivation(string appUserModelId, string mode, string proxyUrl)
     {
-        if (!string.Equals(mode, "Vpn", StringComparison.OrdinalIgnoreCase))
+        using var _ = new TemporaryLaunchEnvironment(BuildLaunchEnvironment(mode, proxyUrl));
+        PackagedAppLauncher.Activate(appUserModelId);
+    }
+
+    private static Dictionary<string, string?> BuildLaunchEnvironment(string mode, string proxyUrl)
+    {
+        var environment = ProxyEnvironmentKeys.ToDictionary(key => key, _ => (string?)null, StringComparer.OrdinalIgnoreCase);
+
+        if (string.Equals(mode, "Vpn", StringComparison.OrdinalIgnoreCase))
         {
-            PackagedAppLauncher.Activate(appUserModelId);
-            return;
+            environment["HTTP_PROXY"] = proxyUrl;
+            environment["HTTPS_PROXY"] = proxyUrl;
+            environment["ALL_PROXY"] = proxyUrl;
+            environment["NO_PROXY"] = NoProxy;
         }
 
-        var proxyVariables = new Dictionary<string, string?>
-        {
-            ["HTTP_PROXY"] = proxyUrl,
-            ["HTTPS_PROXY"] = proxyUrl,
-            ["ALL_PROXY"] = proxyUrl,
-            ["NO_PROXY"] = NoProxy
-        };
+        return environment;
+    }
 
-        using var _ = new TemporaryUserEnvironment(proxyVariables);
-        PackagedAppLauncher.Activate(appUserModelId);
+    private static void ApplyLaunchEnvironment(IDictionary<string, string?> target, IReadOnlyDictionary<string, string?> values)
+    {
+        foreach (var (key, value) in values)
+        {
+            if (value is null)
+            {
+                target.Remove(key);
+                continue;
+            }
+
+            target[key] = value;
+        }
     }
 
     private static string GetLaunchWorkingDirectory(string codexExePath)
@@ -1056,15 +1061,18 @@ internal sealed class CodexInstallInfo
     public string? AppUserModelId { get; }
 }
 
-internal sealed class TemporaryUserEnvironment : IDisposable
+internal sealed class TemporaryLaunchEnvironment : IDisposable
 {
-    private readonly Dictionary<string, string?> previousValues = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string?> previousProcessValues = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string?> previousUserValues = new(StringComparer.OrdinalIgnoreCase);
 
-    public TemporaryUserEnvironment(IReadOnlyDictionary<string, string?> values)
+    public TemporaryLaunchEnvironment(IReadOnlyDictionary<string, string?> values)
     {
         foreach (var (key, value) in values)
         {
-            previousValues[key] = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User);
+            previousProcessValues[key] = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.Process);
+            previousUserValues[key] = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User);
+            Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.Process);
             Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.User);
         }
 
@@ -1073,7 +1081,12 @@ internal sealed class TemporaryUserEnvironment : IDisposable
 
     public void Dispose()
     {
-        foreach (var (key, value) in previousValues)
+        foreach (var (key, value) in previousProcessValues)
+        {
+            Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.Process);
+        }
+
+        foreach (var (key, value) in previousUserValues)
         {
             Environment.SetEnvironmentVariable(key, value, EnvironmentVariableTarget.User);
         }

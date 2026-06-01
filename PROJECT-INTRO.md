@@ -3,11 +3,11 @@
 Codex Proxy Switcher 是一个 Windows 小启动器，用来在启动 Codex 桌面端前选择网络模式：
 
 - 原生启动：不注入代理环境变量，按 Codex 默认网络环境启动。
-- VPN 启动：启动 Codex 前临时注入 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 和 `NO_PROXY`。
+- VPN 启动：激活 Codex 前临时设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 和 `NO_PROXY`，启动后立即恢复。
 
-from [hloolx](https://github.com/hloolx)
+project: [hloolx/codex-proxy-switcher-win](https://github.com/hloolx/codex-proxy-switcher-win)
 
-它不会修改 Windows 全局代理，也不会写入系统级环境变量。代理只影响由这个启动器启动出来的 Codex 进程。
+它不会修改 Windows 全局代理，也不会写入系统级环境变量。为兼容 Windows 商店应用激活，程序会在启动窗口内短暂调整当前用户环境变量，激活 Codex 后恢复原值。
 
 ## 适配其他 Windows 电脑
 
@@ -18,7 +18,7 @@ from [hloolx](https://github.com/hloolx)
    `%APPDATA%\CodexProxySwitcher\settings.json`
 3. 之后每次打开都会自动读取这个端口。
 4. 启动时自动查询这台电脑上的 Windows 商店版 Codex 安装位置和 AppUserModelID。
-5. 如果 WindowsApps 权限拒绝直接启动，会自动改用系统应用激活方式。
+5. 优先通过系统应用激活方式启动 Codex，避免直接运行 WindowsApps 里的 Electron exe。
 6. 首次配置完成后可选择创建桌面快捷方式，只提示一次。
 
 因此，同一个 exe 拷到另一台 Windows 电脑后，第一次运行会让那台电脑的用户输入自己的代理端口，后续就不用重复输入。
@@ -29,8 +29,8 @@ from [hloolx](https://github.com/hloolx)
 
 1. 通过 PowerShell 的 `Get-AppxPackage -Name OpenAI.Codex` 查询安装目录和 Package Family Name。
 2. 读取 `AppxManifest.xml` 获取 Application Id，生成类似 `OpenAI.Codex_2p2nqsd0c76g0!App` 的 AppUserModelID。
-3. 优先直接启动安装目录下的 `app\Codex.exe`，并注入进程级代理环境变量。
-4. 如果 WindowsApps 权限导致直接启动“拒绝访问”，自动改用 AppUserModelID 激活 Codex。
+3. 优先通过 AppUserModelID 激活 Codex，避免绕过 Windows 商店应用启动链路。
+4. VPN 模式会在激活前短暂设置当前用户级代理环境变量，激活后立即恢复原值。
 5. 如果 Appx 查询失败，再在 `C:\Program Files\WindowsApps` 中查找 `OpenAI.Codex_*_x64__2p2nqsd0c76g0`。
 
 如果 Codex 官方后续更改包名或目录结构，可能需要更新匹配规则。
@@ -45,9 +45,9 @@ from [hloolx](https://github.com/hloolx)
 - 新安装电脑启动 WindowsApps 里的 `Codex.exe` 时提示“拒绝访问”。
 - 用户不想修改 Windows 全局代理，只想让 Codex 单独走代理。
 
-它通过“进程级环境变量”实现，只影响由启动器启动的 Codex 进程。
+它通过“临时环境变量 + 系统应用激活”实现，启动后会恢复原来的环境变量。
 
-如果 WindowsApps 权限阻止直接创建 Codex 进程，VPN 模式会短暂设置当前用户级代理环境变量，激活 Codex 后立即恢复原值，用来兼容更严格的新安装环境。
+这样可以兼容更严格的新安装环境，也能避开直接启动 WindowsApps 中 `Codex.exe` 可能触发的 Electron 路径解析问题。
 
 ## API Key 登录说明
 
@@ -57,9 +57,9 @@ from [hloolx](https://github.com/hloolx)
 
 ## 为什么这样做
 
-采用“进程级环境变量”而不是修改 Windows 全局代理，主要是为了降低影响范围：
+采用“临时环境变量”而不是修改 Windows 全局代理，主要是为了降低影响范围：
 
-1. 只影响本启动器启动出来的 Codex。
+1. 只在 Codex 激活窗口内调整代理变量，并在启动后恢复。
 2. 可以随时通过“原生启动”回到默认网络。
 3. 不需要长期管理员权限。
 4. 不影响浏览器、Git、包管理器或其他应用。
